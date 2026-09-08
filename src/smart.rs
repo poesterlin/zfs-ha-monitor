@@ -134,18 +134,37 @@ pub fn whole_disk(device: &str) -> String {
         }
         return d.to_string();
     }
-    // SATA/SCSI form (`/dev/sdb1`, `sda9`): strip trailing digits after sd[a-z].
-    let split = d.rfind(|c: char| !c.is_ascii_digit());
-    match split {
-        Some(i) => {
-            let (root, tail) = (&d[..=i], &d[i + 1..]);
-            if !tail.is_empty() && root.ends_with(|c: char| c.is_ascii_alphabetic()) {
-                d[..=i].to_string()
-            } else {
-                d.to_string()
-            }
+    // SATA/SCSI form (`/dev/sdb1`, `sda9`): strip trailing digits, but only for
+    // real kernel device nodes like sd[a-z]/hd[a-z]/vd[a-z]/fd[a-z]. Anything
+    // else (e.g. by-id `ata-MB018000GYDKR_ZR56VH95` whose serial ends in digits)
+    // is left intact.
+    if is_kernel_disk(d) {
+        let split = d.rfind(|c: char| !c.is_ascii_digit());
+        match split {
+            Some(i) if i + 1 < d.len() => return d[..=i].to_string(),
+            _ => {}
         }
-        None => d.to_string(),
+    }
+    d.to_string()
+}
+
+/// True if `d` is (or is a partition of) a plain kernel disk node such as
+/// `/dev/sdb`, `sda9`, `/dev/vda2`, or `fd0`. Does not match by-id/WWN paths.
+fn is_kernel_disk(d: &str) -> bool {
+    let base = d.rsplit('/').next().unwrap_or(d);
+    let Some(rest) = base.get(2..) else {
+        return false;
+    };
+    match &base[..2] {
+        "sd" | "hd" | "vd" => {
+            let Some(first) = rest.chars().next() else {
+                return false;
+            };
+            first.is_ascii_alphabetic()
+                && rest[1..].bytes().all(|b| b.is_ascii_alphabetic() || b.is_ascii_digit())
+        }
+        "fd" => !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()),
+        _ => false,
     }
 }
 
@@ -221,6 +240,25 @@ mod tests {
         assert_eq!(whole_disk("sda9"), "sda");
         // no partition suffix -> unchanged
         assert_eq!(whole_disk("/dev/nvme0n1"), "/dev/nvme0n1");
+    }
+
+    #[test]
+    fn whole_disk_keeps_by_id_serials_ending_in_digits() {
+        // Regression: by-id serials may legitimately end in digits
+        // (`ZR56VH95`). Only kernel device nodes like `/dev/sdb1` should have
+        // trailing digits stripped, so the disk must stay unchanged.
+        assert_eq!(
+            whole_disk("/dev/disk/by-id/ata-MB018000GYDKR_ZR56VH95-part1"),
+            "/dev/disk/by-id/ata-MB018000GYDKR_ZR56VH95"
+        );
+        assert_eq!(
+            whole_disk("/dev/disk/by-id/ata-MB018000GYDKR_ZR56VH95"),
+            "/dev/disk/by-id/ata-MB018000GYDKR_ZR56VH95"
+        );
+        assert_eq!(
+            short_name("/dev/disk/by-id/ata-MB018000GYDKR_ZR56VH95-part1"),
+            "ata-MB018000GYDKR_ZR56VH95"
+        );
     }
 }
 

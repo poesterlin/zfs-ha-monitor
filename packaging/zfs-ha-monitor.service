@@ -1,13 +1,13 @@
 [Unit]
-Description=ZFS to Home Assistant MQTT monitor
-After=network-online.target
+Description=ZFS HA Monitor
+After=network-online.target zfs.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 # Env file sits next to the binary; secrets are read from it.
-EnvironmentFile=-/opt/zfs-ha-monitor/.env
-ExecStart=/opt/zfs-ha-monitor/zfs-ha-monitor
+EnvironmentFile=/usr/local/bin/.env
+ExecStart=/usr/local/bin/zfs-ha-monitor
 Restart=on-failure
 RestartSec=10
 # The process shells out to zpool/smartctl and opens /dev disk nodes,

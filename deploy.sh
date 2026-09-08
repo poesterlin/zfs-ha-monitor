@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Build the static musl release binary and deploy it to a ZFS host (PVE),
 # installing it as a systemd service. Read-only host-side: only writes the
-# binary, .env, and the unit under /opt/zfs-ha-monitor.
+# binary, .env, and the unit (binary + env live under /usr/local/bin to match
+# the running service).
 set -euo pipefail
 
 # Target host (user@host) and optional explicit binary path.
 HOST="${HOST:-root@pve}"
 BIN_SRC="target/x86_64-unknown-linux-musl/release/zfs-ha-monitor"
-DEST_DIR="/opt/zfs-ha-monitor"
+DEST_DIR="/usr/local/bin"
 SERVICE="zfs-ha-monitor"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
