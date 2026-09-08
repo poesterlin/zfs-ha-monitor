@@ -25,11 +25,13 @@ cargo build --release --target x86_64-unknown-linux-musl
 
 echo ">>> Deploying to $HOST..."
 ssh "$HOST" "mkdir -p '$DEST_DIR'"
-scp "$BIN_SRC" "$HOST:$DEST_DIR/zfs-ha-monitor"
-scp .env "$HOST:$DEST_DIR/.env"
-scp packaging/zfs-ha-monitor.service "$HOST:/etc/systemd/system/$SERVICE.service"
+# Stage via /tmp then install: direct scp over a running binary fails
+# with ETXTBSY ("dest open ... Failure"), rename/install succeeds.
+scp "$BIN_SRC" "$HOST:/tmp/$SERVICE.new"
+scp .env "$HOST:/tmp/$SERVICE.env.new"
+scp packaging/zfs-ha-monitor.service "$HOST:/tmp/$SERVICE.service.new"
 
-ssh "$HOST" "chmod +x '$DEST_DIR/zfs-ha-monitor' && systemctl daemon-reload && systemctl enable --now $SERVICE && systemctl --no-pager status $SERVICE --lines=0"
+ssh "$HOST" "install -m 0755 /tmp/$SERVICE.new '$DEST_DIR/zfs-ha-monitor' && install -m 0644 /tmp/$SERVICE.env.new '$DEST_DIR/.env' && install -m 0644 /tmp/$SERVICE.service.new /etc/systemd/system/$SERVICE.service && rm -f /tmp/$SERVICE.new /tmp/$SERVICE.env.new /tmp/$SERVICE.service.new && systemctl daemon-reload && systemctl enable --now $SERVICE && systemctl --no-pager status $SERVICE --lines=0"
 
 echo ">>> Deployed. Service: $SERVICE on $HOST"
 echo ">>> To restart:  systemctl restart $SERVICE"
